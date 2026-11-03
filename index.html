@@ -34,7 +34,7 @@ td.n,th.n{text-align:right}
     <input id="f" type="file" accept="image/*" multiple>
     <button id="go" disabled>読み取って集計</button>
   </div>
-  <p class="s" id="st">レース結果のスクショを選んでね(複数OK)</p><div id="sel"></div><details><summary class="s">読み取った文字(確認用)</summary><pre id="raw" class="s" style="white-space:pre-wrap"></pre></details></div><div id="pend"></div><div class="card"><strong>登録タグ</strong><div class="row" style="margin-top:8px"><input id="ti" placeholder="タグを入力" style="flex:1;min-width:0;padding:9px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font:inherit"><button id="ta">追加</button></div><div class="row" id="tl" style="margin-top:8px"></div>
+  <p class="s" id="st">レース結果のスクショを選んでね(複数OK)</p><div id="sel"></div><details><summary class="s">読み取った文字(確認用)</summary><pre id="raw" class="s" style="white-space:pre-wrap"></pre></details></div><div class="card" id="calc" style="display:none"><strong>読み取り範囲の調整</strong><p class="s">赤い枠が名前の欄に重なるように動かしてね(設定は保存されます)</p><canvas id="cv" style="width:100%;border-radius:8px"></canvas><div id="sl"></div></div><div id="pend"></div><div class="card"><strong>登録タグ</strong><div class="row" style="margin-top:8px"><input id="ti" placeholder="タグを入力" style="flex:1;min-width:0;padding:9px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font:inherit"><button id="ta">追加</button></div><div class="row" id="tl" style="margin-top:8px"></div>
 </div>
 <div class="card">
   <div class="row" style="justify-content:space-between"><strong>タグ別ランキング</strong><span class="s" id="cnt"></span></div>
@@ -80,8 +80,32 @@ function render(){
   const t=document.createElement('div');t.style.cssText='flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';t.textContent=(i+1)+'. '+r.players.slice(0,3).map(p=>(p.tag?p.tag+' ':'')+p.name).join(' / ')+'…('+r.players.length+'人)';d.appendChild(t);
   const b=document.createElement('button');b.className='sub';b.textContent='削除';b.onclick=()=>{if(confirm('このスクショ分を消す?')){races.splice(i,1);save();render()}};d.appendChild(b);rl.appendChild(d)})}
 }
-function rsel(){const el=$('sel');el.innerHTML='';files.forEach((f,i)=>{const d=document.createElement('div');d.className='row';d.style.cssText='flex-wrap:nowrap;margin-top:6px';const im=document.createElement('img');im.src=URL.createObjectURL(f);im.style.cssText='width:56px;height:40px;object-fit:cover;border-radius:6px;flex:none';const t=document.createElement('span');t.className='s';t.style.cssText='flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';t.textContent=(i+1)+'. '+f.name;const bt=document.createElement('button');bt.className='sub';bt.textContent='✕';bt.onclick=()=>{files.splice(i,1);rsel()};d.append(im,t,bt);el.appendChild(d)});$('go').disabled=!files.length;$('st').textContent=files.length?files.length+'枚選択中':'レース結果のスクショを選んでね(複数OK)'}
+function rsel(){const el=$('sel');el.innerHTML='';files.forEach((f,i)=>{const d=document.createElement('div');d.className='row';d.style.cssText='flex-wrap:nowrap;margin-top:6px';const im=document.createElement('img');im.src=URL.createObjectURL(f);im.style.cssText='width:56px;height:40px;object-fit:cover;border-radius:6px;flex:none';const t=document.createElement('span');t.className='s';t.style.cssText='flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';t.textContent=(i+1)+'. '+f.name;const bt=document.createElement('button');bt.className='sub';bt.textContent='✕';bt.onclick=()=>{files.splice(i,1);rsel()};d.append(im,t,bt);el.appendChild(d)});$('go').disabled=!files.length;$('st').textContent=files.length?files.length+'枚選択中':'レース結果のスクショを選んでね(複数OK)';rcal()}
 $('f').onchange=e=>{files=files.concat([...e.target.files]);e.target.value='';rsel()};
+let P={x:.53,w:.21,y1:.096,y12:.91,h:.062};
+try{Object.assign(P,JSON.parse(localStorage.getItem('mkp')||'{}'))}catch(e){}
+let calImg=null;
+async function rcal(){
+  const box=$('calc');
+  if(!files.length){box.style.display='none';calImg=null;return}
+  box.style.display='block';
+  if(!calImg||calImg.f!==files[0]){calImg={f:files[0],b:await createImageBitmap(files[0])}}
+  drawCal();
+}
+function drawCal(){
+  if(!calImg)return;const b=calImg.b,cv=$('cv'),sc=Math.min(1,900/b.width);
+  cv.width=Math.round(b.width*sc);cv.height=Math.round(b.height*sc);
+  const x=cv.getContext('2d');x.drawImage(b,0,0,cv.width,cv.height);x.strokeStyle='#e60012';x.lineWidth=Math.max(2,cv.width/300);
+  for(let i=0;i<12;i++){const cy=P.y1+(P.y12-P.y1)*i/11;x.strokeRect(cv.width*P.x,cv.height*(cy-P.h/2),cv.width*P.w,cv.height*P.h)}
+}
+[['x','名前欄の左端',.1,.9],['w','名前欄の幅',.05,.5],['y1','1位の高さ',0,.5],['y12','12位の高さ',.5,1],['h','1行の高さ',.02,.12]].forEach(([k,l,mn,mx])=>{
+  const d=document.createElement('div');d.className='row';d.style.cssText='flex-wrap:nowrap;margin-top:6px';
+  const sp=document.createElement('span');sp.className='s';sp.style.width='96px';sp.textContent=l;
+  const r=document.createElement('input');r.type='range';r.min=mn;r.max=mx;r.step=.002;r.value=P[k];r.style.flex='1';
+  r.oninput=()=>{P[k]=+r.value;try{localStorage.setItem('mkp',JSON.stringify(P))}catch(e){}drawCal()};
+  d.append(sp,r);$('sl').appendChild(d);
+});
+function otsu(h,n){let sum=0;for(let i=0;i<256;i++)sum+=i*h[i];let sB=0,wB=0,mx=0,th=128;for(let i=0;i<256;i++){wB+=h[i];if(!wB)continue;const wF=n-wB;if(!wF)break;sB+=i*h[i];const mB=sB/wB,mF=(sum-sB)/wF,v=wB*wF*(mB-mF)*(mB-mF);if(v>mx){mx=v;th=i}}return th}
 let pend=[];
 const lev=(a,b)=>{const m=[...Array(a.length+1)].map((_,i)=>[i,...Array(b.length).fill(0)]);for(let j=1;j<=b.length;j++)m[0][j]=j;for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)m[i][j]=Math.min(m[i-1][j]+1,m[i][j-1]+1,m[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return m[a.length][b.length]};
 function match(t){
@@ -100,13 +124,13 @@ function match(t){
 }
 async function cropRow(f,i){
   const b=await createImageBitmap(f),W=b.width,H=b.height;
-  const sx=W*0.53,sw=W*0.21,sh=H*0.062,sy=H*(0.096+0.074*i)-sh/2,k=3,pad=14;
+  const sx=W*P.x,sw=W*P.w,sh=H*P.h,sy=H*(P.y1+(P.y12-P.y1)*i/11)-sh/2,k=Math.max(.5,Math.min(3,90/sh)),pad=14;
   const c=document.createElement('canvas');c.width=Math.round(sw*k)+pad*2;c.height=Math.round(sh*k)+pad*2;
   const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);
   const t=document.createElement('canvas');t.width=c.width-pad*2;t.height=c.height-pad*2;
   const tx=t.getContext('2d');tx.drawImage(b,sx,sy,sw,sh,0,0,t.width,t.height);
   const d=tx.getImageData(0,0,t.width,t.height),p=d.data;
-  let ar=0,ab=0;const nn=p.length/4;for(let j=0;j<p.length;j+=4){ar+=p[j];ab+=p[j+2]}ar/=nn;ab/=nn;const yel=ar>170&&ab<110;for(let j=0;j<p.length;j+=4){const r=p[j],g=p[j+1],bl=p[j+2],on=yel?g<150:Math.min(r,g,bl)>170,v=on?0:255;p[j]=p[j+1]=p[j+2]=v}
+  let ar=0,ab=0;const nn=p.length/4;for(let j=0;j<p.length;j+=4){ar+=p[j];ab+=p[j+2]}ar/=nn;ab/=nn;const yel=ar>170&&ab<110;const vals=new Uint8Array(nn),hist=new Array(256).fill(0);for(let j=0,q=0;j<p.length;j+=4,q++){const v=yel?255-p[j+1]:Math.min(p[j],p[j+1],p[j+2]);vals[q]=v;hist[v]++}let cum=0,p99=255;for(let i=0;i<256;i++){cum+=hist[i];if(cum>=nn*.99){p99=i;break}}const th=Math.max(otsu(hist,nn),yel?100:Math.min(170,p99*.85));for(let j=0,q=0;j<p.length;j+=4,q++){const v=vals[q]>th?0:255;p[j]=p[j+1]=p[j+2]=v}const tw=t.width,thh=t.height,lim=Math.round(thh*.65);for(let y=0;y<thh;y++){let x0=0;while(x0<tw){if(p[(y*tw+x0)*4]===0){let x1=x0;while(x1<tw&&p[(y*tw+x1)*4]===0)x1++;if(x1-x0>lim)for(let x=x0;x<x1;x++){const o=(y*tw+x)*4;p[o]=p[o+1]=p[o+2]=255}x0=x1}else x0++}}
   tx.putImageData(d,0,0);x.drawImage(t,pad,pad);return c;
 }
 $('go').onclick=async()=>{
