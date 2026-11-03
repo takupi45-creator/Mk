@@ -34,7 +34,7 @@ td.n,th.n{text-align:right}
     <input id="f" type="file" accept="image/*" multiple>
     <button id="go" disabled>読み取って集計</button>
   </div>
-  <p class="s" id="st">レース結果のスクショを選んでね(複数OK)</p><div id="sel"></div><details><summary class="s">読み取った文字(確認用)</summary><pre id="raw" class="s" style="white-space:pre-wrap"></pre></details></div><div class="card" id="calc" style="display:none"><strong>読み取り範囲の調整</strong><p class="s">赤い枠が名前の欄に重なるように動かしてね(設定は保存されます)</p><canvas id="cv" style="width:100%;border-radius:8px"></canvas><div id="sl"></div></div><div id="pend"></div><div class="card"><strong>登録タグ</strong><div class="row" style="margin-top:8px"><input id="ti" placeholder="タグを入力" style="flex:1;min-width:0;padding:9px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font:inherit"><button id="ta">追加</button></div><div class="row" id="tl" style="margin-top:8px"></div>
+  <p class="s" id="st">レース結果のスクショを選んでね(複数OK)</p><div id="sel"></div><details><summary class="s">読み取った文字(確認用)</summary><pre id="raw" class="s" style="white-space:pre-wrap"></pre></details></div><div class="card" id="calc" style="display:none"><strong>読み取り範囲の調整</strong><p class="s" id="hint" style="min-height:4.2em;margin:6px 0">1位の名前の左上から12位の名前の右下まで、指でなぞって囲んでね(設定は保存されます)</p><canvas id="cv" style="width:100%;border-radius:8px"></canvas><details style="margin-top:8px"><summary class="s">細かく調整する</summary><div id="sl"></div></details></div><div id="pend"></div><div class="card"><strong>登録タグ</strong><div class="row" style="margin-top:8px"><input id="ti" placeholder="タグを入力" style="flex:1;min-width:0;padding:9px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--fg);font:inherit"><button id="ta">追加</button></div><div class="row" id="tl" style="margin-top:8px"></div>
 </div>
 <div class="card">
   <div class="row" style="justify-content:space-between"><strong>タグ別ランキング</strong><span class="s" id="cnt"></span></div>
@@ -89,7 +89,7 @@ async function rcal(){
   const box=$('calc');
   if(!files.length){box.style.display='none';calImg=null;return}
   box.style.display='block';
-  if(!calImg||calImg.f!==files[0]){calImg={f:files[0],b:await createImageBitmap(files[0])}}
+  if(!calImg||calImg.f!==files[0]){calImg={f:files[0],b:await createImageBitmap(files[0])};tp=null}
   drawCal();
 }
 function drawCal(){
@@ -98,13 +98,24 @@ function drawCal(){
   const x=cv.getContext('2d');x.drawImage(b,0,0,cv.width,cv.height);x.strokeStyle='#e60012';x.lineWidth=Math.max(2,cv.width/300);
   for(let i=0;i<12;i++){const cy=P.y1+(P.y12-P.y1)*i/11;x.strokeRect(cv.width*P.x,cv.height*(cy-P.h/2),cv.width*P.w,cv.height*P.h)}
 }
+const SL={};
 [['x','名前欄の左端',.1,.9],['w','名前欄の幅',.05,.5],['y1','1位の高さ',0,.5],['y12','12位の高さ',.5,1],['h','1行の高さ',.02,.12]].forEach(([k,l,mn,mx])=>{
   const d=document.createElement('div');d.className='row';d.style.cssText='flex-wrap:nowrap;margin-top:6px';
   const sp=document.createElement('span');sp.className='s';sp.style.width='96px';sp.textContent=l;
-  const r=document.createElement('input');r.type='range';r.min=mn;r.max=mx;r.step=.002;r.value=P[k];r.style.flex='1';
+  const r=document.createElement('input');r.type='range';r.min=mn;r.max=mx;r.step=.002;r.value=P[k];r.style.flex='1';SL[k]=r;
   r.oninput=()=>{P[k]=+r.value;try{localStorage.setItem('mkp',JSON.stringify(P))}catch(e){}drawCal()};
   d.append(sp,r);$('sl').appendChild(d);
 });
+let tp=null;
+(()=>{
+  const cv=$('cv');cv.style.touchAction='none';
+  const pos=e=>{const r=cv.getBoundingClientRect();return{x:Math.min(1,Math.max(0,(e.clientX-r.left)/r.width)),y:Math.min(1,Math.max(0,(e.clientY-r.top)/r.height))}};
+  const apply=(a,b)=>{const xa=Math.min(a.x,b.x),xb=Math.max(a.x,b.x),ya=Math.min(a.y,b.y),yb=Math.max(a.y,b.y),pitch=(yb-ya)/12;if(pitch<=.002||xb-xa<.01)return false;P.x=xa;P.w=xb-xa;P.h=pitch*.85;P.y1=ya+pitch/2;P.y12=ya+pitch*11.5;return true};
+  cv.onpointerdown=e=>{e.preventDefault();cv.setPointerCapture(e.pointerId);tp=pos(e)};
+  cv.onpointermove=e=>{if(!tp)return;if(apply(tp,pos(e)))drawCal()};
+  cv.onpointerup=e=>{if(!tp)return;if(apply(tp,pos(e))){try{localStorage.setItem('mkp',JSON.stringify(P))}catch(err){}Object.keys(SL).forEach(k=>SL[k].value=P[k]);drawCal();$('hint').textContent='赤い枠が名前の欄に合ってればOK。ずれてたら、もう一度なぞってね'}tp=null};
+  cv.onpointercancel=()=>{tp=null};
+})();
 function otsu(h,n){let sum=0;for(let i=0;i<256;i++)sum+=i*h[i];let sB=0,wB=0,mx=0,th=128;for(let i=0;i<256;i++){wB+=h[i];if(!wB)continue;const wF=n-wB;if(!wF)break;sB+=i*h[i];const mB=sB/wB,mF=(sum-sB)/wF,v=wB*wF*(mB-mF)*(mB-mF);if(v>mx){mx=v;th=i}}return th}
 let pend=[];
 const lev=(a,b)=>{const m=[...Array(a.length+1)].map((_,i)=>[i,...Array(b.length).fill(0)]);for(let j=1;j<=b.length;j++)m[0][j]=j;for(let i=1;i<=a.length;i++)for(let j=1;j<=b.length;j++)m[i][j]=Math.min(m[i-1][j]+1,m[i][j-1]+1,m[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return m[a.length][b.length]};
